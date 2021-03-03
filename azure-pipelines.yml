@@ -1,0 +1,178 @@
+parameters:
+- name: runtimeBranch
+  displayName: Branch for runtime repository
+  type: string
+  default: v5.0.3
+- name: aspBranch
+  displayName: Branch for aspnetcore repository
+  type: string
+  default: v5.0.3
+- name: sdkBranch
+  displayName: Branch for installer repository
+  type: string
+  default: v5.0.103
+
+variables:
+  runCounter: $[counter('runNumber', 1)]
+
+resources:
+  repositories:
+  - repository: runtime
+    type: github
+    endpoint: Servarr
+    name: dotnet/runtime
+    ref: release/5.0
+  - repository: aspnetcore
+    type: github
+    endpoint: Servarr
+    name: dotnet/aspnetcore
+    ref: release/5.0
+  - repository: installer
+    type: github
+    endpoint: Servarr
+    name: dotnet/installer
+    ref: release/5.0.1xx
+
+trigger:
+  branches:
+    include:
+    - master
+
+pr:
+- master
+
+stages:
+  - stage: Runtime
+
+    pool:
+      vmImage: 'ubuntu-18.04'
+
+    jobs:
+      - job: Setup
+        steps:
+        - bash: |
+            BRANCH=${{ parameters.runtimeBranch }}
+            echo "##vso[build.updatebuildnumber]${BRANCH/\//-}-${RUNCOUNTER}"
+          displayName: Set Build Name
+
+      - job: Runtime
+        timeoutInMinutes: 0
+        steps:
+          - checkout: self
+          - checkout: runtime
+          - bash: |
+              set -e
+              git -C runtime checkout ${{ parameters.runtimeBranch }}
+              git -C runtime apply ../dotnet-linux-x86/patches/runtime/0001-Fix-build-for-linux-x86.patch
+              sed -i '/\/dnceng\/internal\//d' runtime/NuGet.config
+            displayName: Checkout and patch
+          - bash: |
+              wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | gpg --dearmor - | sudo tee /etc/apt/trusted.gpg.d/kitware.gpg >/dev/null
+              sudo apt-add-repository 'deb https://apt.kitware.com/ubuntu/ bionic main'
+              sudo apt-get update
+              sudo apt-get install -y cmake llvm-9 clang-9 autoconf automake libtool build-essential python curl git lldb-6.0 liblldb-6.0-dev libunwind8 libunwind8-dev gettext libicu-dev liblttng-ust-dev libssl-dev libnuma-dev libkrb5-dev zlib1g-dev debootstrap qemu-user-static
+              sudo runtime/eng/common/cross/build-rootfs.sh x86
+              export ROOTFS_DIR=$(pwd)/runtime/.tools/rootfs/x86
+              echo $ROOTFS_DIR
+              runtime/build.sh -ci -c Release -cross -arch x86
+
+            displayName: Build Runtime
+          - publish: '$(Build.SourcesDirectory)/runtime/artifacts/packages/Release/Shipping'
+            artifact: RuntimePackages
+            displayName: Publish Runtime
+
+  - stage: AspNetCore
+    dependsOn: Runtime
+    pool:
+      vmImage: 'ubuntu-18.04'
+    jobs:
+      - job: AspNetCore
+        timeoutInMinutes: 0
+        steps:
+          - checkout: self
+          - checkout: aspnetcore
+            submodules: true
+          - bash: |
+              set -e
+              git -C aspnetcore checkout ${{ parameters.aspBranch }}
+              sed -i '/linux-x64;/a \ \ \ \ \ \ linux-x86;' aspnetcore/Directory.Build.props
+              sed -i '/<LatestPackageReference Include="Microsoft.NETCore.App.Runtime.linux-x64" \/>/a \ \ \ \ <LatestPackageReference Include="Microsoft.NETCore.App.Runtime.linux-x86" \/>' aspnetcore/eng/Dependencies.props
+              dotnet nuget add source ../runtime/artifacts/packages/Release/Shipping --name local --configfile aspnetcore/NuGet.config
+              sed -i '/\/dnceng\/internal\//d' aspnetcore/NuGet.config
+            displayName: Apply patches
+          - task: DownloadPipelineArtifact@2
+            inputs:
+              buildType: 'current'
+              artifactName: RuntimePackages
+              targetPath: '$(Build.SourcesDirectory)/runtime/artifacts/packages/Release/Shipping'
+              patterns: |
+                dotnet-runtime-*-linux-x86.tar.gz
+                Microsoft.*.linux-x86.*.nupkg
+          - bash: |
+              set -e
+              ls -lR runtime
+              mkdir -p aspnetcore/artifacts/obj/Microsoft.AspNetCore.App.Runtime
+              cp runtime/artifacts/packages/Release/Shipping/dotnet-runtime-*-linux-x86.tar.gz aspnetcore/artifacts/obj/Microsoft.AspNetCore.App.Runtime
+              aspnetcore/build.sh -c Release -ci -arch x86 -pack -nobl /p:OfficialBuildId=$(date +%Y%m%d)-99
+            displayName: Build AspNetCore
+          - publish: '$(Build.SourcesDirectory)/aspnetcore/artifacts/packages/Release/Shipping'
+            artifact: AspNetCorePackages
+            displayName: Publish AspNetCore Packages
+          - publish: '$(Build.SourcesDirectory)/aspnetcore/artifacts/installers/Release'
+            artifact: AspNetCoreInstallers
+            displayName: Publish AspNetCore Installers
+
+  - stage: Installer
+    dependsOn: AspNetCore
+    pool:
+      vmImage: 'ubuntu-18.04'
+    jobs:
+      - job: Installer
+        timeoutInMinutes: 0
+        steps:
+          - checkout: self
+          - checkout: installer
+          - bash: |
+              set -e
+              git -C installer checkout ${{ parameters.sdkBranch }}
+              dotnet nuget remove source msbuild --configfile installer/NuGet.config || true
+              dotnet nuget remove source nuget-build --configfile installer/NuGet.config || true
+              dotnet nuget add source ../runtime/artifacts/packages/Release/Shipping --name runtime --configfile installer/NuGet.config
+              dotnet nuget add source ../aspnetcore/artifacts/packages/Release/Shipping --name aspnetcore --configfile installer/NuGet.config
+              sed -i '/\/dnceng\/internal\//d' installer/NuGet.config
+              sed -i 's/NetCore5AppHostRids Include="@(NetCore31RuntimePackRids)/NetCore5AppHostRids Include="@(NetCore31RuntimePackRids);linux-x86/' installer/src/redist/targets/GenerateBundledVersions.targets
+              sed -i 's/AspNetCore50RuntimePackRids Include="@(AspNetCore31RuntimePackRids)/AspNetCore50RuntimePackRids Include="@(AspNetCore31RuntimePackRids);linux-x86/' installer/src/redist/targets/GenerateBundledVersions.targets
+            displayName: Apply patches
+          - task: DownloadPipelineArtifact@2
+            inputs:
+              buildType: 'current'
+              artifactName: RuntimePackages
+              targetPath: '$(Build.SourcesDirectory)/runtime/artifacts/packages/Release/Shipping'
+              patterns: |
+                dotnet-runtime-*-linux-x86.tar.gz
+                Microsoft.*.linux-x86.*.nupkg
+          - task: DownloadPipelineArtifact@2
+            inputs:
+              buildType: 'current'
+              artifactName: AspNetCorePackages
+              targetPath: '$(Build.SourcesDirectory)/aspnetcore/artifacts/packages/Release/Shipping'
+              patterns: |
+                Microsoft.*.linux-x86.*.nupkg
+          - task: DownloadPipelineArtifact@2
+            inputs:
+              buildType: 'current'
+              artifactName: AspNetCoreInstallers
+              targetPath: '$(Build.SourcesDirectory)/aspnetcore/artifacts/installers/Release'
+              patterns: 'aspnetcore-runtime-*'
+          - bash: |
+              set -e
+              ls -lR runtime
+              ls -lR aspnetcore
+              mkdir -p installer/artifacts/obj/redist/Release/downloads/
+              cp runtime/artifacts/packages/Release/Shipping/dotnet-runtime-*-linux-x86.tar.gz installer/artifacts/obj/redist/Release/downloads/
+              cp aspnetcore/artifacts/installers/Release/aspnetcore-runtime-* installer/artifacts/obj/redist/Release/downloads/
+              installer/build.sh -c Release -ci  -pack -nobl --architecture x86 --runtime-id linux-x64 /p:OfficialBuildId=$(date +%Y%m%d)-99 /p:IncludeAspNetCoreRuntime=True /p:HostRid=linux-x64
+            displayName: Build Installer
+          - publish: '$(Build.SourcesDirectory)/installer/artifacts/packages/Release/Shipping'
+            artifact: Installer
+            displayName: Publish Installer
