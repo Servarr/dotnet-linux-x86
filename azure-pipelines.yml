@@ -1,16 +1,20 @@
 parameters:
 - name: runtimeBranch
-  displayName: Branch for runtime repository
+  displayName: Tag for runtime repository
   type: string
-  default: v5.0.3
+  default: v6.0.2
 - name: aspBranch
-  displayName: Branch for aspnetcore repository
+  displayName: Tag for aspnetcore repository
   type: string
-  default: v5.0.3
+  default: v6.0.2
 - name: sdkBranch
-  displayName: Branch for installer repository
+  displayName: Tag for sdk repository
   type: string
-  default: v5.0.103
+  default: v6.0.200
+- name: installerBranch
+  displayName: Tag for installer repository
+  type: string
+  default: v6.0.200
 
 variables:
   runCounter: $[counter('runNumber', 1)]
@@ -21,17 +25,22 @@ resources:
     type: github
     endpoint: Servarr
     name: dotnet/runtime
-    ref: release/5.0
+    ref: release/6.0
   - repository: aspnetcore
     type: github
     endpoint: Servarr
     name: dotnet/aspnetcore
-    ref: release/5.0
+    ref: release/6.0
+  - repository: sdk
+    type: github
+    endpoint: Servarr
+    name: dotnet/sdk
+    ref: release/6.0.2xx
   - repository: installer
     type: github
     endpoint: Servarr
     name: dotnet/installer
-    ref: release/5.0.1xx
+    ref: release/6.0.2xx
 
 trigger:
   branches:
@@ -63,7 +72,9 @@ stages:
           - bash: |
               set -e
               git -C runtime checkout ${{ parameters.runtimeBranch }}
-              git -C runtime apply ../dotnet-linux-x86/patches/runtime/0001-Fix-build-for-linux-x86.patch
+              git -C runtime cherry-pick -n 3633a7d0930abaca701385c1059b80ca157e98c6
+              git -C runtime cherry-pick -n 3e6d492bdf6fbf2d8af3871379f31dcc6e27716b
+              # git -C runtime apply ../dotnet-linux-x86/patches/runtime/0001-Fix-build-for-linux-x86.patch
               sed -i '/\/dnceng\/internal\//d' runtime/NuGet.config
             displayName: Checkout and patch
           - bash: |
@@ -81,6 +92,36 @@ stages:
             artifact: RuntimePackages
             displayName: Publish Runtime
 
+  - stage: Sdk
+    dependsOn: []
+
+    pool:
+      vmImage: 'ubuntu-20.04'
+
+    jobs:
+      - job: Sdk
+        timeoutInMinutes: 0
+        steps:
+          - checkout: self
+          - checkout: sdk
+          - bash: |
+              set -e
+              git -C sdk checkout ${{ parameters.sdkBranch }}
+            displayName: Checkout and patch
+          - bash: |
+              source dotnet-bsd/common.sh
+              calculate_build_id $(git -C sdk tag --points-at HEAD)
+              echo $OFFICIALBUILDID
+              sdk/build.sh -c Release -pack -ci /p:OfficialBuildId=$OFFICIALBUILDID
+            displayName: Build SDK
+          - publish: '$(Build.SourcesDirectory)/sdk/artifacts/packages/Release/NonShipping/'
+            artifact: SdkPackages
+            displayName: Publish SDK
+          - publish: '$(Build.SourcesDirectory)/sdk/artifacts/log'
+            condition: succeededOrFailed()
+            artifact: SdkLogs
+            displayName: Publish Build Logs
+
   - stage: AspNetCore
     dependsOn: Runtime
     pool:
@@ -95,11 +136,12 @@ stages:
           - bash: |
               set -e
               git -C aspnetcore checkout ${{ parameters.aspBranch }}
+              git -C aspnetcore submodule update --init
               sed -i '/linux-x64;/a \ \ \ \ \ \ linux-x86;' aspnetcore/Directory.Build.props
               sed -i '/<LatestPackageReference Include="Microsoft.NETCore.App.Runtime.linux-x64" \/>/a \ \ \ \ <LatestPackageReference Include="Microsoft.NETCore.App.Runtime.linux-x86" \/>' aspnetcore/eng/Dependencies.props
               dotnet nuget add source ../runtime/artifacts/packages/Release/Shipping --name local --configfile aspnetcore/NuGet.config
               sed -i '/\/dnceng\/internal\//d' aspnetcore/NuGet.config
-            displayName: Apply patches
+            displayName: Checkout and patch
           - task: DownloadPipelineArtifact@2
             inputs:
               buildType: 'current'
