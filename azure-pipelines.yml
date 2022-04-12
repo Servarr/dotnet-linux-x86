@@ -2,19 +2,19 @@ parameters:
 - name: runtimeBranch
   displayName: Tag for runtime repository
   type: string
-  default: v6.0.3
+  default: v7.0.0-preview.2
 - name: aspBranch
   displayName: Tag for aspnetcore repository
   type: string
-  default: v6.0.3
+  default: v7.0.0-preview.2
 - name: sdkBranch
   displayName: Tag for sdk repository
   type: string
-  default: v6.0.201
+  default: v7.0.100-preview.2
 - name: installerBranch
   displayName: Tag for installer repository
   type: string
-  default: v6.0.201
+  default: v7.0.100-preview.2
 
 variables:
   runCounter: $[counter('runNumber', 1)]
@@ -25,30 +25,30 @@ resources:
     type: github
     endpoint: Servarr
     name: dotnet/runtime
-    ref: release/6.0
+    ref: release/7.0-preview2
   - repository: aspnetcore
     type: github
     endpoint: Servarr
     name: dotnet/aspnetcore
-    ref: release/6.0
+    ref: main
   - repository: sdk
     type: github
     endpoint: Servarr
     name: dotnet/sdk
-    ref: release/6.0.2xx
+    ref: release/7.0.1xx-preview2
   - repository: installer
     type: github
     endpoint: Servarr
     name: dotnet/installer
-    ref: release/6.0.2xx
+    ref: release/7.0.1xx-preview2
 
 trigger:
   branches:
     include:
-    - v6
+    - v7
 
 pr:
-- v6
+- v7
 
 stages:
   - stage: Runtime
@@ -71,16 +71,11 @@ stages:
           - checkout: runtime
           - bash: |
               set -e
-              git -C runtime checkout ${{ parameters.runtimeBranch }}
+              git -C runtime tag | grep ${{ parameters.runtimeBranch }} | xargs git -C runtime checkout
               git -C runtime apply ../dotnet-linux-x86/patches/runtime/0001-Fix-duplicate-definition-of-_RUNTIME_FUNCTION-on-lin.patch
-              git -C runtime cherry-pick -n 7263ce5562ffd4bc515269add609886ea3d907d8
-              git -C runtime cherry-pick -n -Xtheirs 7d7b56e4416555c41c55ef2dc25d3f65d6c3d471
-              git -C runtime cherry-pick -n -Xtheirs bfcb5426ebec6cbfa67d5ca09bcc4a1d5a5216a3
               sed -i 's/return/__SkipCrossArchBuild=0/' runtime/src/coreclr/build-runtime.sh
               sed -i '/AppHostRuntimeIdentifier/d' runtime/src/coreclr/tools/aot/crossgen2/crossgen2.csproj
               sed -i '/\/dnceng\/internal\//d' runtime/NuGet.config
-              sed -i '/PublishReadyToRun Condition/a \ \ \ \ <PublishReadyToRun>false<\/PublishReadyToRun>' runtime/src/installer/pkg/sfx/Microsoft.NETCore.App/Microsoft.NETCore.App.Runtime.props
-              sed -i '/crossgen-corelib/d' runtime/eng/Subsets.props
             displayName: Checkout and patch
           - bash: |
               docker build -t dotnet-linux-x86 - < dotnet-linux-x86/Dockerfile
@@ -91,7 +86,7 @@ stages:
               echo $OFFICIALBUILDID
 
               docker run -v ${BUILD_SOURCESDIRECTORY}/runtime:/runtime dotnet-linux-x86 /runtime/eng/build.sh -ci -c Release -cross -os Linux -arch x86 /p:OfficialBuildId=$OFFICIALBUILDID -subset Clr.Native+Host.Native
-              docker run -v ${BUILD_SOURCESDIRECTORY}/runtime:/runtime dotnet-linux-x86 /runtime/eng/build.sh -ci -c Release -cross -os Linux -arch x86 /p:OfficialBuildId=$OFFICIALBUILDID /p:AppHostSourcePath=/runtime/artifacts/obj/linux-x86.Release/apphost/standalone/apphost || true
+              docker run -v ${BUILD_SOURCESDIRECTORY}/runtime:/runtime dotnet-linux-x86 /runtime/eng/build.sh -ci -c Release -cross -os Linux -arch x86 /p:OfficialBuildId=$OFFICIALBUILDID /p:AppHostSourcePath=/runtime/artifacts/obj/linux-x86.Release/apphost/standalone/apphost
             displayName: Build Runtime
             continueOnError: true
           - publish: '$(Build.SourcesDirectory)/runtime/artifacts/packages/Release/Shipping'
@@ -112,7 +107,7 @@ stages:
           - checkout: sdk
           - bash: |
               set -e
-              git -C sdk checkout ${{ parameters.sdkBranch }}
+              git -C sdk tag | grep ${{ parameters.sdkBranch }} | xargs git -C sdk checkout
             displayName: Checkout and patch
           - bash: |
               source dotnet-linux-x86/common.sh
@@ -141,7 +136,7 @@ stages:
             submodules: true
           - bash: |
               set -e
-              git -C aspnetcore checkout ${{ parameters.aspBranch }}
+              git -C aspnetcore tag | grep ${{ parameters.aspBranch }} | xargs git -C aspnetcore checkout
               git -C aspnetcore submodule update --init
               sed -i '/linux-x64;/a \ \ \ \ \ \ linux-x86;' aspnetcore/Directory.Build.props
               sed -i '/<LatestPackageReference Include="Microsoft.NETCore.App.Runtime.linux-x64" \/>/a \ \ \ \ <LatestPackageReference Include="Microsoft.NETCore.App.Runtime.linux-x86" \/>' aspnetcore/eng/Dependencies.props
@@ -185,7 +180,7 @@ stages:
           - checkout: installer
           - bash: |
               set -e
-              git -C installer checkout ${{ parameters.sdkBranch }}
+              git -C installer tag | grep ${{ parameters.installerBranch }} | xargs git -C installer checkout
               dotnet nuget remove source msbuild --configfile installer/NuGet.config || true
               dotnet nuget remove source nuget-build --configfile installer/NuGet.config || true
               dotnet nuget add source ../runtime/artifacts/packages/Release/Shipping --name runtime --configfile installer/NuGet.config
