@@ -45,10 +45,10 @@ resources:
 trigger:
   branches:
     include:
-    - master
+    - v6
 
 pr:
-- master
+- v6
 
 stages:
   - stage: Runtime
