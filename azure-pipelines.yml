@@ -2,19 +2,19 @@ parameters:
 - name: runtimeBranch
   displayName: Tag for runtime repository
   type: string
-  default: v7.0.0-preview.2
+  default: v7.0.0-preview.3
 - name: aspBranch
   displayName: Tag for aspnetcore repository
   type: string
-  default: v7.0.0-preview.2
+  default: v7.0.0-preview.3
 - name: sdkBranch
   displayName: Tag for sdk repository
   type: string
-  default: v7.0.100-preview.2
+  default: v7.0.100-preview.3
 - name: installerBranch
   displayName: Tag for installer repository
   type: string
-  default: v7.0.100-preview.2
+  default: v7.0.100-preview.3
 
 variables:
   runCounter: $[counter('runNumber', 1)]
@@ -25,7 +25,7 @@ resources:
     type: github
     endpoint: Servarr
     name: dotnet/runtime
-    ref: release/7.0-preview2
+    ref: main
   - repository: aspnetcore
     type: github
     endpoint: Servarr
@@ -35,12 +35,12 @@ resources:
     type: github
     endpoint: Servarr
     name: dotnet/sdk
-    ref: release/7.0.1xx-preview2
+    ref: main
   - repository: installer
     type: github
     endpoint: Servarr
     name: dotnet/installer
-    ref: release/7.0.1xx-preview2
+    ref: main
 
 trigger:
   branches:
@@ -73,6 +73,7 @@ stages:
               set -e
               git -C runtime tag | grep ${{ parameters.runtimeBranch }} | xargs git -C runtime checkout
               git -C runtime apply ../dotnet-linux-x86/patches/runtime/0001-Fix-duplicate-definition-of-_RUNTIME_FUNCTION-on-lin.patch
+              git -C runtime cherry-pick -n d22aceff4b4b83672cfaaab92d9977445213f9f5
               sed -i 's/return/__SkipCrossArchBuild=0/' runtime/src/coreclr/build-runtime.sh
               sed -i '/AppHostRuntimeIdentifier/d' runtime/src/coreclr/tools/aot/crossgen2/crossgen2.csproj
               sed -i '/\/dnceng\/internal\//d' runtime/NuGet.config
