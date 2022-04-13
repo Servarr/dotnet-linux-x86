@@ -164,7 +164,7 @@ stages:
               ls -lR runtime
               mkdir -p aspnetcore/artifacts/obj/Microsoft.AspNetCore.App.Runtime
               cp runtime/artifacts/packages/Release/Shipping/dotnet-runtime-*-linux-x86.tar.gz aspnetcore/artifacts/obj/Microsoft.AspNetCore.App.Runtime
-              aspnetcore/eng/build.sh -c Release -ci -arch x86 -pack /p:CrossgenOutput=false /p:OfficialBuildId=$(date +%Y%m%d)-99
+              aspnetcore/eng/build.sh -c Release -ci -arch x86 -pack /p:CrossgenOutput=false /p:OfficialBuildId=$OFFICIALBUILDID
             displayName: Build AspNetCore
           - publish: '$(Build.SourcesDirectory)/aspnetcore/artifacts/packages/Release/Shipping'
             artifact: AspNetCorePackages
