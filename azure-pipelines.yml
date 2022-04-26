@@ -74,8 +74,6 @@ stages:
               git -C runtime tag | grep ${{ parameters.runtimeBranch }} | xargs git -C runtime checkout
               git -C runtime apply ../dotnet-linux-x86/patches/runtime/0001-Fix-duplicate-definition-of-_RUNTIME_FUNCTION-on-lin.patch
               git -C runtime cherry-pick -n d22aceff4b4b83672cfaaab92d9977445213f9f5
-              git -C runtime revert -n eb8460fd29f
-
               sed -i 's/return/__SkipCrossArchBuild=0/' runtime/src/coreclr/build-runtime.sh
               sed -i '/AppHostRuntimeIdentifier/d' runtime/src/coreclr/tools/aot/crossgen2/crossgen2.csproj
               sed -i '/\/dnceng\/internal\//d' runtime/NuGet.config
