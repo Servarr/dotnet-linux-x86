@@ -1,21 +1,3 @@
-parameters:
-- name: runtimeBranch
-  displayName: Tag for runtime repository
-  type: string
-  default: v7.0.0-preview.3
-- name: aspBranch
-  displayName: Tag for aspnetcore repository
-  type: string
-  default: v7.0.0-preview.3
-- name: sdkBranch
-  displayName: Tag for sdk repository
-  type: string
-  default: v7.0.100-preview.3
-- name: installerBranch
-  displayName: Tag for installer repository
-  type: string
-  default: v7.0.100-preview.3
-
 variables:
   runCounter: $[counter('runNumber', 1)]
 
@@ -25,21 +7,6 @@ resources:
     type: github
     endpoint: Servarr
     name: dotnet/runtime
-    ref: main
-  - repository: aspnetcore
-    type: github
-    endpoint: Servarr
-    name: dotnet/aspnetcore
-    ref: main
-  - repository: sdk
-    type: github
-    endpoint: Servarr
-    name: dotnet/sdk
-    ref: main
-  - repository: installer
-    type: github
-    endpoint: Servarr
-    name: dotnet/installer
     ref: main
 
 trigger:
@@ -57,13 +24,6 @@ stages:
       vmImage: 'ubuntu-20.04'
 
     jobs:
-      - job: Setup
-        steps:
-        - bash: |
-            BRANCH=${{ parameters.runtimeBranch }}
-            echo "##vso[build.updatebuildnumber]${BRANCH/\//-}-${RUNCOUNTER}"
-          displayName: Set Build Name
-
       - job: Runtime
         timeoutInMinutes: 0
         steps:
@@ -71,11 +31,7 @@ stages:
           - checkout: runtime
           - bash: |
               set -e
-              git -C runtime tag | grep ${{ parameters.runtimeBranch }} | xargs git -C runtime checkout
               git -C runtime apply ../dotnet-linux-x86/patches/runtime/0001-Fix-duplicate-definition-of-_RUNTIME_FUNCTION-on-lin.patch
-              git -C runtime cherry-pick -n d22aceff4b4b83672cfaaab92d9977445213f9f5
-
-              sed -i 's/return/__SkipCrossArchBuild=0/' runtime/src/coreclr/build-runtime.sh
               sed -i '/AppHostRuntimeIdentifier/d' runtime/src/coreclr/tools/aot/crossgen2/crossgen2.csproj
               sed -i '/\/dnceng\/internal\//d' runtime/NuGet.config
               sed -i '/PublishReadyToRun Condition/a \ \ \ \ <PublishReadyToRun>false<\/PublishReadyToRun>' runtime/src/installer/pkg/sfx/Microsoft.NETCore.App/Microsoft.NETCore.App.Runtime.props
@@ -85,146 +41,10 @@ stages:
               docker build -t dotnet-linux-x86 - < dotnet-linux-x86/Dockerfile
             displayName: Build cross root
           - bash: |
-              source dotnet-linux-x86/common.sh
-              calculate_build_id $(git -C runtime tag --points-at HEAD)
-              echo $OFFICIALBUILDID
-
-              docker run -v ${BUILD_SOURCESDIRECTORY}/runtime:/runtime dotnet-linux-x86 /runtime/eng/build.sh -ci -c Release -cross -os Linux -arch x86 /p:OfficialBuildId=$OFFICIALBUILDID -subset Clr.Native+Host.Native
-              docker run -v ${BUILD_SOURCESDIRECTORY}/runtime:/runtime dotnet-linux-x86 /runtime/eng/build.sh -ci -c Release -cross -os Linux -arch x86 /p:OfficialBuildId=$OFFICIALBUILDID /p:AppHostSourcePath=/runtime/artifacts/obj/linux-x86.Release/apphost/standalone/apphost
+              docker run -v ${BUILD_SOURCESDIRECTORY}/runtime:/runtime dotnet-linux-x86 /runtime/eng/build.sh -ci -c Release -cross -os Linux -arch x86 -subset Clr.Native+Host.Native
+              docker run -v ${BUILD_SOURCESDIRECTORY}/runtime:/runtime dotnet-linux-x86 /runtime/eng/build.sh -ci -c Release -cross -os Linux -arch x86 /p:AppHostSourcePath=/runtime/artifacts/obj/linux-x86.Release/apphost/standalone/apphost
             displayName: Build Runtime
             continueOnError: true
           - publish: '$(Build.SourcesDirectory)/runtime/artifacts/packages/Release/Shipping'
             artifact: RuntimePackages
             displayName: Publish Runtime
-
-  - stage: Sdk
-    dependsOn: []
-
-    pool:
-      vmImage: 'ubuntu-20.04'
-
-    jobs:
-      - job: Sdk
-        timeoutInMinutes: 0
-        steps:
-          - checkout: self
-          - checkout: sdk
-          - bash: |
-              set -e
-              git -C sdk tag | grep ${{ parameters.sdkBranch }} | xargs git -C sdk checkout
-            displayName: Checkout and patch
-          - bash: |
-              source dotnet-linux-x86/common.sh
-              calculate_build_id $(git -C sdk tag --points-at HEAD)
-              echo $OFFICIALBUILDID
-              sdk/build.sh -c Release -pack -ci /p:OfficialBuildId=$OFFICIALBUILDID
-            displayName: Build SDK
-          - publish: '$(Build.SourcesDirectory)/sdk/artifacts/packages/Release/NonShipping/'
-            artifact: SdkPackages
-            displayName: Publish SDK
-          - publish: '$(Build.SourcesDirectory)/sdk/artifacts/log'
-            condition: succeededOrFailed()
-            artifact: SdkLogs
-            displayName: Publish Build Logs
-
-  - stage: AspNetCore
-    dependsOn: Runtime
-    pool:
-      vmImage: 'ubuntu-20.04'
-    jobs:
-      - job: AspNetCore
-        timeoutInMinutes: 0
-        steps:
-          - checkout: self
-          - checkout: aspnetcore
-            submodules: true
-          - bash: |
-              set -e
-              git -C aspnetcore tag | grep ${{ parameters.aspBranch }} | xargs git -C aspnetcore checkout
-              git -C aspnetcore submodule update --init
-              sed -i '/linux-x64;/a \ \ \ \ \ \ linux-x86;' aspnetcore/Directory.Build.props
-              sed -i '/<LatestPackageReference Include="Microsoft.NETCore.App.Runtime.linux-x64" \/>/a \ \ \ \ <LatestPackageReference Include="Microsoft.NETCore.App.Runtime.linux-x86" \/>' aspnetcore/eng/Dependencies.props
-              dotnet nuget add source ../runtime/artifacts/packages/Release/Shipping --name local --configfile aspnetcore/NuGet.config
-              sed -i '/\/dnceng\/internal\//d' aspnetcore/NuGet.config
-            displayName: Checkout and patch
-          - task: DownloadPipelineArtifact@2
-            inputs:
-              buildType: 'current'
-              artifactName: RuntimePackages
-              targetPath: '$(Build.SourcesDirectory)/runtime/artifacts/packages/Release/Shipping'
-              patterns: |
-                dotnet-runtime-*-linux-x86.tar.gz
-                Microsoft.*.linux-x86.*.nupkg
-          - bash: |
-              set -e
-              source dotnet-linux-x86/common.sh
-              calculate_build_id $(git -C aspnetcore tag --points-at HEAD)
-              echo $OFFICIALBUILDID
-              ls -lR runtime
-              mkdir -p aspnetcore/artifacts/obj/Microsoft.AspNetCore.App.Runtime
-              cp runtime/artifacts/packages/Release/Shipping/dotnet-runtime-*-linux-x86.tar.gz aspnetcore/artifacts/obj/Microsoft.AspNetCore.App.Runtime
-              aspnetcore/eng/build.sh -c Release -ci -arch x86 -pack /p:CrossgenOutput=false /p:OfficialBuildId=$OFFICIALBUILDID
-            displayName: Build AspNetCore
-          - publish: '$(Build.SourcesDirectory)/aspnetcore/artifacts/packages/Release/Shipping'
-            artifact: AspNetCorePackages
-            displayName: Publish AspNetCore Packages
-          - publish: '$(Build.SourcesDirectory)/aspnetcore/artifacts/installers/Release'
-            artifact: AspNetCoreInstallers
-            displayName: Publish AspNetCore Installers
-
-  - stage: Installer
-    dependsOn: AspNetCore
-    pool:
-      vmImage: 'ubuntu-20.04'
-    jobs:
-      - job: Installer
-        timeoutInMinutes: 0
-        steps:
-          - checkout: self
-          - checkout: installer
-          - bash: |
-              set -e
-              git -C installer tag | grep ${{ parameters.installerBranch }} | xargs git -C installer checkout
-              dotnet nuget remove source msbuild --configfile installer/NuGet.config || true
-              dotnet nuget remove source nuget-build --configfile installer/NuGet.config || true
-              dotnet nuget add source ../runtime/artifacts/packages/Release/Shipping --name runtime --configfile installer/NuGet.config
-              dotnet nuget add source ../aspnetcore/artifacts/packages/Release/Shipping --name aspnetcore --configfile installer/NuGet.config
-              sed -i '/\/dnceng\/internal\//d' installer/NuGet.config
-              sed -i 's/linux-s390x/linux-s390x;linux-x86/g' installer/src/redist/targets/GenerateBundledVersions.targets
-            displayName: Apply patches
-          - task: DownloadPipelineArtifact@2
-            inputs:
-              buildType: 'current'
-              artifactName: RuntimePackages
-              targetPath: '$(Build.SourcesDirectory)/runtime/artifacts/packages/Release/Shipping'
-              patterns: |
-                dotnet-runtime-*-linux-x86.tar.gz
-                Microsoft.*.linux-x86.*.nupkg
-          - task: DownloadPipelineArtifact@2
-            inputs:
-              buildType: 'current'
-              artifactName: AspNetCorePackages
-              targetPath: '$(Build.SourcesDirectory)/aspnetcore/artifacts/packages/Release/Shipping'
-              patterns: |
-                Microsoft.*.linux-x86.*.nupkg
-          - task: DownloadPipelineArtifact@2
-            inputs:
-              buildType: 'current'
-              artifactName: AspNetCoreInstallers
-              targetPath: '$(Build.SourcesDirectory)/aspnetcore/artifacts/installers/Release'
-              patterns: 'aspnetcore-runtime-*'
-          - bash: |
-              set -e
-              source dotnet-linux-x86/common.sh
-              calculate_build_id $(git -C installer tag --points-at HEAD)
-              echo $OFFICIALBUILDID
-              ls -lR runtime
-              ls -lR aspnetcore
-              mkdir -p installer/artifacts/obj/redist/Release/downloads/
-              cp runtime/artifacts/packages/Release/Shipping/dotnet-runtime-*-linux-x86.tar.gz installer/artifacts/obj/redist/Release/downloads/
-              cp aspnetcore/artifacts/installers/Release/aspnetcore-runtime-* installer/artifacts/obj/redist/Release/downloads/
-              installer/build.sh -c Release -ci -pack --architecture x86 --runtime-id linux-x86 /p:DISABLE_CROSSGEN=True /p:OfficialBuildId=$OFFICIALBUILDID /p:IncludeAspNetCoreRuntime=True /p:HostRid=linux-x64
-            displayName: Build Installer
-          - publish: '$(Build.SourcesDirectory)/installer/artifacts/packages/Release/Shipping'
-            artifact: Installer
-            displayName: Publish Installer
