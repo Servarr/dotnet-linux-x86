@@ -41,8 +41,12 @@ stages:
               docker build -t dotnet-linux-x86 - < dotnet-linux-x86/Dockerfile
             displayName: Build cross root
           - bash: |
-              docker run -v ${BUILD_SOURCESDIRECTORY}/runtime:/runtime dotnet-linux-x86 /runtime/eng/build.sh -ci -c Release -cross -os Linux -arch x86 -subset Clr.Native+Host.Native
-              docker run -v ${BUILD_SOURCESDIRECTORY}/runtime:/runtime dotnet-linux-x86 /runtime/eng/build.sh -ci -c Release -cross -os Linux -arch x86 /p:AppHostSourcePath=/runtime/artifacts/obj/linux-x86.Release/apphost/standalone/apphost
+              source dotnet-linux-x86/common.sh
+              calculate_build_id $(git -C runtime tag --points-at HEAD)
+              echo $OFFICIALBUILDID
+
+              docker run -v ${BUILD_SOURCESDIRECTORY}/runtime:/runtime dotnet-linux-x86 /runtime/eng/build.sh -ci -c Release -cross -os Linux -arch x86 /p:OfficialBuildId=$OFFICIALBUILDID -subset Clr.Native+Host.Native
+              docker run -v ${BUILD_SOURCESDIRECTORY}/runtime:/runtime dotnet-linux-x86 /runtime/eng/build.sh -ci -c Release -cross -os Linux -arch x86 /p:OfficialBuildId=$OFFICIALBUILDID /p:AppHostSourcePath=/runtime/artifacts/obj/linux-x86.Release/apphost/standalone/apphost
             displayName: Build Runtime
             continueOnError: true
           - publish: '$(Build.SourcesDirectory)/runtime/artifacts/packages/Release/Shipping'
