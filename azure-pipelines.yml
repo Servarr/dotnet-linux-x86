@@ -2,19 +2,19 @@ parameters:
 - name: runtimeBranch
   displayName: Tag for runtime repository
   type: string
-  default: v7.0.0-preview.4
+  default: v7.0.0
 - name: aspBranch
   displayName: Tag for aspnetcore repository
   type: string
-  default: v7.0.0-preview.4
+  default: v7.0.0
 - name: sdkBranch
   displayName: Tag for sdk repository
   type: string
-  default: v7.0.100-preview.4
+  default: v7.0.100-rtm
 - name: installerBranch
   displayName: Tag for installer repository
   type: string
-  default: v7.0.100-preview.4
+  default: v7.0.100-rtm
 
 variables:
   runCounter: $[counter('runNumber', 1)]
@@ -25,22 +25,22 @@ resources:
     type: github
     endpoint: Servarr
     name: dotnet/runtime
-    ref: main
+    ref: release/7.0
   - repository: aspnetcore
     type: github
     endpoint: Servarr
     name: dotnet/aspnetcore
-    ref: main
+    ref: release/7.0
   - repository: sdk
     type: github
     endpoint: Servarr
     name: dotnet/sdk
-    ref: main
+    ref: release/7.0.1xx
   - repository: installer
     type: github
     endpoint: Servarr
     name: dotnet/installer
-    ref: main
+    ref: release/7.0.1xx
 
 trigger:
   branches:
@@ -71,8 +71,7 @@ stages:
           - checkout: runtime
           - bash: |
               set -e
-              git -C runtime tag | grep ${{ parameters.runtimeBranch }} | xargs git -C runtime checkout
-              git -C runtime cherry-pick -n 8f7761af3763d0b84acefbb117ed6becd83061d1
+              git -C runtime checkout ${{ parameters.runtimeBranch }}
               sed -i 's/return/__SkipCrossArchBuild=0/' runtime/src/coreclr/build-runtime.sh
               sed -i '/AppHostRuntimeIdentifier/d' runtime/src/coreclr/tools/aot/crossgen2/crossgen2.csproj
               sed -i '/\/dnceng\/internal\//d' runtime/NuGet.config
@@ -138,7 +137,7 @@ stages:
             submodules: true
           - bash: |
               set -e
-              git -C aspnetcore tag | grep ${{ parameters.aspBranch }} | xargs git -C aspnetcore checkout
+              git -C aspnetcore checkout ${{ parameters.aspBranch }}
               git -C aspnetcore submodule update --init
               sed -i '/linux-x64;/a \ \ \ \ \ \ linux-x86;' aspnetcore/Directory.Build.props
               sed -i '/<LatestPackageReference Include="Microsoft.NETCore.App.Runtime.linux-x64" \/>/a \ \ \ \ <LatestPackageReference Include="Microsoft.NETCore.App.Runtime.linux-x86" \/>' aspnetcore/eng/Dependencies.props
