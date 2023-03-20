@@ -2,19 +2,19 @@ parameters:
 - name: runtimeBranch
   displayName: Tag for runtime repository
   type: string
-  default: v6.0.3
+  default: v6.0.15
 - name: aspBranch
   displayName: Tag for aspnetcore repository
   type: string
-  default: v6.0.3
+  default: v6.0.15
 - name: sdkBranch
   displayName: Tag for sdk repository
   type: string
-  default: v6.0.201
+  default: v6.0.407
 - name: installerBranch
   displayName: Tag for installer repository
   type: string
-  default: v6.0.201
+  default: v6.0.407
 
 variables:
   runCounter: $[counter('runNumber', 1)]
