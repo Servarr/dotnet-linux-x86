@@ -156,6 +156,10 @@ stages:
               patterns: |
                 dotnet-runtime-*-linux-x86.tar.gz
                 Microsoft.*.linux-x86.*.nupkg
+          - task: NodeTool@0
+            inputs:
+              versionSource: 'spec'
+              versionSpec: '16.x'
           - bash: |
               set -e
               source dotnet-linux-x86/common.sh
