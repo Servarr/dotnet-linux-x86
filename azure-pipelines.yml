@@ -35,12 +35,12 @@ resources:
     type: github
     endpoint: Servarr
     name: dotnet/sdk
-    ref: release/6.0.2xx
+    ref: release/6.0.4xx
   - repository: installer
     type: github
     endpoint: Servarr
     name: dotnet/installer
-    ref: release/6.0.2xx
+    ref: release/6.0.4xx
 
 trigger:
   branches:
