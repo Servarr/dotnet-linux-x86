@@ -108,7 +108,7 @@ stages:
           - checkout: sdk
           - bash: |
               set -e
-              git -C sdk tag | grep ${{ parameters.sdkBranch }} | xargs git -C sdk checkout
+              git -C sdk checkout ${{ parameters.sdkBranch }}
             displayName: Checkout and patch
           - bash: |
               source dotnet-linux-x86/common.sh
