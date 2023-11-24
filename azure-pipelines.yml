@@ -139,7 +139,7 @@ stages:
               set -e
               git -C aspnetcore checkout ${{ parameters.aspBranch }}
               git -C aspnetcore submodule update --init
-              sed -i '/linux-x64;/a \ \ \ \ \ \ linux-x86;' aspnetcore/Directory.Build.props
+              sed -i 's/linux-x64;/&linux-x86;/' aspnetcore/Directory.Build.props
               sed -i '/<LatestPackageReference Include="Microsoft.NETCore.App.Runtime.linux-x64" \/>/a \ \ \ \ <LatestPackageReference Include="Microsoft.NETCore.App.Runtime.linux-x86" \/>' aspnetcore/eng/Dependencies.props
               dotnet nuget add source ../runtime/artifacts/packages/Release/Shipping --name local --configfile aspnetcore/NuGet.config
               sed -i '/\/dnceng\/internal\//d' aspnetcore/NuGet.config
