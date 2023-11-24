@@ -2,19 +2,19 @@ parameters:
 - name: runtimeBranch
   displayName: Tag for runtime repository
   type: string
-  default: v7.0.0
+  default: v8.0.0
 - name: aspBranch
   displayName: Tag for aspnetcore repository
   type: string
-  default: v7.0.0
+  default: v8.0.0
 - name: sdkBranch
   displayName: Tag for sdk repository
   type: string
-  default: v7.0.100-rtm
+  default: v8.0.100
 - name: installerBranch
   displayName: Tag for installer repository
   type: string
-  default: v7.0.100-rtm
+  default: v8.0.100
 
 variables:
   runCounter: $[counter('runNumber', 1)]
@@ -25,36 +25,36 @@ resources:
     type: github
     endpoint: Servarr
     name: dotnet/runtime
-    ref: release/7.0
+    ref: release/8.0
   - repository: aspnetcore
     type: github
     endpoint: Servarr
     name: dotnet/aspnetcore
-    ref: release/7.0
+    ref: release/8.0
   - repository: sdk
     type: github
     endpoint: Servarr
     name: dotnet/sdk
-    ref: release/7.0.1xx
+    ref: release/8.0.1xx
   - repository: installer
     type: github
     endpoint: Servarr
     name: dotnet/installer
-    ref: release/7.0.1xx
+    ref: release/8.0.1xx
 
 trigger:
   branches:
     include:
-    - v7
+    - v8
 
 pr:
-- v7
+- v8
 
 stages:
   - stage: Runtime
 
     pool:
-      vmImage: 'ubuntu-20.04'
+      vmImage: 'ubuntu-22.04'
 
     jobs:
       - job: Setup
@@ -98,7 +98,7 @@ stages:
     dependsOn: []
 
     pool:
-      vmImage: 'ubuntu-20.04'
+      vmImage: 'ubuntu-22.04'
 
     jobs:
       - job: Sdk
@@ -127,7 +127,7 @@ stages:
   - stage: AspNetCore
     dependsOn: Runtime
     pool:
-      vmImage: 'ubuntu-20.04'
+      vmImage: 'ubuntu-22.04'
     jobs:
       - job: AspNetCore
         timeoutInMinutes: 0
@@ -172,7 +172,7 @@ stages:
   - stage: Installer
     dependsOn: AspNetCore
     pool:
-      vmImage: 'ubuntu-20.04'
+      vmImage: 'ubuntu-22.04'
     jobs:
       - job: Installer
         timeoutInMinutes: 0
