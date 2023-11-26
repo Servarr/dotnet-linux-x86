@@ -63,7 +63,7 @@ stages:
   - stage: Runtime
 
     pool:
-      vmImage: 'ubuntu-22.04'
+      vmImage: 'ubuntu-20.04'
 
     jobs:
       - job: Setup
@@ -107,7 +107,7 @@ stages:
     dependsOn: []
 
     pool:
-      vmImage: 'ubuntu-22.04'
+      vmImage: 'ubuntu-20.04'
 
     jobs:
       - job: Aspire
@@ -135,7 +135,7 @@ stages:
     dependsOn: []
 
     pool:
-      vmImage: 'ubuntu-22.04'
+      vmImage: 'ubuntu-20.04'
 
     jobs:
       - job: Sdk
@@ -164,7 +164,7 @@ stages:
   - stage: AspNetCore
     dependsOn: Runtime
     pool:
-      vmImage: 'ubuntu-22.04'
+      vmImage: 'ubuntu-20.04'
     jobs:
       - job: AspNetCore
         timeoutInMinutes: 0
@@ -211,7 +211,7 @@ stages:
      - AspNetCore
      - Aspire
     pool:
-      vmImage: 'ubuntu-22.04'
+      vmImage: 'ubuntu-20.04'
     jobs:
       - job: Installer
         timeoutInMinutes: 0
