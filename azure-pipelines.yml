@@ -11,6 +11,10 @@ parameters:
   displayName: Tag for sdk repository
   type: string
   default: v8.0.100
+- name: aspireBranch
+  displayName: Tag for aspire repository
+  type: string
+  default: v8.0.0-preview.1.23557.2
 - name: installerBranch
   displayName: Tag for installer repository
   type: string
@@ -36,6 +40,11 @@ resources:
     endpoint: Servarr
     name: dotnet/sdk
     ref: release/8.0.1xx
+  - repository: aspire
+    type: github
+    endpoint: Servarr
+    name: dotnet/aspire
+    ref: release/8.0-preview1
   - repository: installer
     type: github
     endpoint: Servarr
@@ -93,6 +102,34 @@ stages:
           - publish: '$(Build.SourcesDirectory)/runtime/artifacts/packages/Release/Shipping'
             artifact: RuntimePackages
             displayName: Publish Runtime
+
+  - stage: Aspire
+    dependsOn: []
+
+    pool:
+      vmImage: 'ubuntu-22.04'
+
+    jobs:
+      - job: Aspire
+        timeoutInMinutes: 0
+        steps:
+          - checkout: self
+          - checkout: aspire
+          - bash: |
+              set -e
+              git -C aspire checkout ${{ parameters.aspireBranch }}
+              sed -i '/\/dnceng\/internal\//d' aspire/NuGet.config
+            displayName: Checkout and patch
+          - bash: |
+              aspire/build.sh --restore --build --pack --ci -c Release /p:OfficialBuildId=20231101.7
+            displayName: Build SDK
+          - publish: '$(Build.SourcesDirectory)/aspire/artifacts/packages/Release/Shipping/'
+            artifact: AspirePackages
+            displayName: Publish Aspire
+          - publish: '$(Build.SourcesDirectory)/aspire/artifacts/log'
+            condition: succeededOrFailed()
+            artifact: AspireLogs
+            displayName: Publish Build Logs
 
   - stage: Sdk
     dependsOn: []
@@ -170,7 +207,9 @@ stages:
             displayName: Publish AspNetCore Installers
 
   - stage: Installer
-    dependsOn: AspNetCore
+    dependsOn: 
+     - AspNetCore
+     - Aspire
     pool:
       vmImage: 'ubuntu-22.04'
     jobs:
@@ -186,6 +225,7 @@ stages:
               dotnet nuget remove source nuget-build --configfile installer/NuGet.config || true
               dotnet nuget add source ../runtime/artifacts/packages/Release/Shipping --name runtime --configfile installer/NuGet.config
               dotnet nuget add source ../aspnetcore/artifacts/packages/Release/Shipping --name aspnetcore --configfile installer/NuGet.config
+              dotnet nuget add source ../aspire/artifacts/packages/Release/Shipping --name aspire --configfile installer/NuGet.config
               sed -i '/\/dnceng\/internal\//d' installer/NuGet.config
               sed -i 's/linux-s390x/linux-s390x;linux-x86/g' installer/src/redist/targets/GenerateBundledVersions.targets
             displayName: Apply patches
@@ -204,6 +244,13 @@ stages:
               targetPath: '$(Build.SourcesDirectory)/aspnetcore/artifacts/packages/Release/Shipping'
               patterns: |
                 Microsoft.*.linux-x86.*.nupkg
+          - task: DownloadPipelineArtifact@2
+            inputs:
+              buildType: 'current'
+              artifactName: AspirePackages
+              targetPath: '$(Build.SourcesDirectory)/aspire/artifacts/packages/Release/Shipping'
+              patterns: |
+                Microsoft.*.nupkg
           - task: DownloadPipelineArtifact@2
             inputs:
               buildType: 'current'
