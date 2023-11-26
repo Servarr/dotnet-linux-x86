@@ -220,7 +220,7 @@ stages:
           - checkout: installer
           - bash: |
               set -e
-              git -C installer checkout ${{ parameters.sdkBranch }}
+              git -C installer checkout ${{ parameters.installerBranch }}
               dotnet nuget remove source msbuild --configfile installer/NuGet.config || true
               dotnet nuget remove source nuget-build --configfile installer/NuGet.config || true
               dotnet nuget add source ../runtime/artifacts/packages/Release/Shipping --name runtime --configfile installer/NuGet.config
