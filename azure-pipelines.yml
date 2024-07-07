@@ -2,19 +2,19 @@ parameters:
 - name: runtimeBranch
   displayName: Tag for runtime repository
   type: string
-  default: v6.0.29
+  default: v6.0.32
 - name: aspBranch
   displayName: Tag for aspnetcore repository
   type: string
-  default: v6.0.29
+  default: v6.0.32
 - name: sdkBranch
   displayName: Tag for sdk repository
   type: string
-  default: v6.0.421
+  default: v6.0.424
 - name: installerBranch
   displayName: Tag for installer repository
   type: string
-  default: v6.0.421
+  default: v6.0.424
 
 variables:
   runCounter: $[counter('runNumber', 1)]
@@ -86,6 +86,7 @@ stages:
               docker build -t dotnet-linux-x86 - < dotnet-linux-x86/Dockerfile
             displayName: Build cross root
           - bash: |
+              set -e
               source dotnet-linux-x86/common.sh
               calculate_build_id $(git -C runtime tag --points-at HEAD)
               echo $OFFICIALBUILDID
